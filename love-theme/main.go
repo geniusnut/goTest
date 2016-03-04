@@ -25,7 +25,10 @@ func main() {
 	api := rest.NewApi()
 	api.Use(rest.DefaultDevStack...)
 	router, err := rest.MakeRouter(
-		rest.Get("/users/:id", func(w rest.ResponseWriter, req *rest.Request) {
+		rest.Get("/message", func(w rest.ResponseWriter, req *rest.Request) {
+			w.WriteJson(map[string]string{"msg" : "Hello, world"})
+		}),
+		rest.Get("/user/:id", func(w rest.ResponseWriter, req *rest.Request) {
 			id := req.PathParam("id")
 			_, err := c.Do("HGET", id, "name")
 			user := &User{
@@ -41,17 +44,26 @@ func main() {
 				w.(http.ResponseWriter).Write([]byte("error"))
 			}
 		}),
+		rest.Get("/login", func(w rest.ResponseWriter, req *rest.Request) {
+			name := req.URL.Query().Get("name")
+			token := req.URL.Query().Get("token")
+			c.Do("MULTI")
+			c.Do("SADD", "users", token)
+			c.Do("HMSET", "user:" + token, "name", name)
+			c.Do("EXEC")
+		}),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 	api.SetApp(router)
-	htt
+	http.Handle("/api/", http.StripPrefix("/api", api.MakeHandler()))
+	http.Handle("/upload", http.StripPrefix("/upload", http.HandlerFunc(UploadPicture)))
 	
-	log.Fatal(http.ListenAndServe(":8080", api.MakeHandler()))
+	log.Fatal(http.ListenAndServe(":9090", nil))
 }
 
-func UploadPicture(w rest.ResponseWriter, r *rest.Request) {
+func UploadPicture(w http.ResponseWriter, r *http.Request) {
 	r.ParseMultipartForm(32 << 20)
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
